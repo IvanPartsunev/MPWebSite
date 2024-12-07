@@ -53,11 +53,15 @@ The API will power the following sections of the website:
    ```bash
    pip install -r requirements.txt
 
-4. **Run the application**:
+4. **Run PostgreSQL in Docker (Optional)**:
+   ```bash
+   docker-compose up -d --build
+
+5. **Run the application**:
    ```bash
    uvicorn main:app --reload
 
-5. **Access the API documentation**:
+6. **Access the API documentation**:
   - Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for Swagger UI.
   - Open [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc) for ReDoc documentation.
 
