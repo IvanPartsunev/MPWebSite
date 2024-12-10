@@ -154,3 +154,5 @@ docker-compose.yaml
 # Files used during dev
 
 caller.py
+
+logs

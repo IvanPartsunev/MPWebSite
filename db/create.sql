@@ -1,1 +1,1 @@
-CREATE DATABASE "mp-db";
+CREATE DATABASE "mp_db";
