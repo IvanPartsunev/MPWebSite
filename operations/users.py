@@ -1,15 +1,16 @@
+import bcrypt
 import datetime
 import logging
-from logging.handlers import RotatingFileHandler
-
-import bcrypt
-
+import exceptions.users
 import configuration
 import db.connection
 import db.models
+
+from logging.handlers import RotatingFileHandler
+from jose import jwt, JWTError, ExpiredSignatureError
+from fastapi import HTTPException, Request
 from sqlalchemy import delete, or_, update
-import exceptions.users
-from jose import jwt
+
 
 
 def _hash_password(password: str) -> str:
@@ -23,13 +24,14 @@ def _check_password(password: str, hashed_password: str) -> bool:
 
 def create_user(first_name: str, last_name: str, email: str, phone_number:int, password: str):
     with db.connection.get_session() as session:
-        if get_user(username=username, email=email):
+        if get_user(email=email, phone_number=phone_number):
             raise exceptions.users.UserAlreadyExists()
         else:
             new_user = db.models.User(
                 first_name=first_name,
                 last_name=last_name,
-                email=email, phone_number=phone_number,
+                email=email,
+                phone_number=phone_number,
                 password=_hash_password(password)
             )
             session.add(new_user)
@@ -58,18 +60,50 @@ def get_user(*, user_id: str = None, phone_number: int = None, email: str = None
     return user
 
 
-def sign_in(username: str, password: str | None = None) -> str:
-    if user := get_user(username=username):
+def sign_in(email: str, password: str | None = None):
+    if user := get_user(email=email):
         if password and not _check_password(password, user.password):
             raise exceptions.users.WrongCredentialsException()
-        payload = {"exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=60), "sub": str(user.id)}
-        if user.roles:
-            payload["roles"] = user.roles
+        access_payload = {"exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=60), "sub": str(user.id)}
+        if user.role:
+            access_payload["role"] = user.role.role.name
         jwt_config = configuration.JWT()
-        return jwt.encode(payload, key=jwt_config.key, algorithm=jwt_config.algorithm)
+        access_token = jwt.encode(access_payload, key=jwt_config.key, algorithm=jwt_config.algorithm)
+
+        refresh_payload = {
+            "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=7),  # 7 days
+            "sub": str(user.id),
+        }
+        refresh_token = jwt.encode(refresh_payload, key=jwt_config.key, algorithm=jwt_config.algorithm)
+
+        return access_token, refresh_token
+
     else:
         raise exceptions.users.UserDoesNotExistException()
 
+
+def get_new_access_token(request: Request):
+    jwt_config = configuration.JWT()
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+
+    try:
+        payload = jwt.decode(refresh_token, key=jwt_config.key, algorithms=[jwt_config.algorithm])
+
+        access_payload = {
+            "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=60),  # 1 hour
+            "sub": payload["sub"],
+        }
+        access_token = jwt.encode(access_payload, key=jwt_config.key, algorithm=jwt_config.algorithm)
+
+        return access_token
+
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 def get_users():
     with db.connection.get_session() as session:
@@ -89,13 +123,6 @@ def remove_user_from_role(user_id: str, role_id: str):
     with db.connection.get_session() as session:
         stmt = delete(db.models.UserRole).where(db.models.UserRole.role_id == role_id, db.models.UserRole.user_id == user_id)
         session.execute(stmt)
-        session.commit()
-
-
-def update_user_tokens(user_id, tokens):
-    with db.connection.get_session() as session:
-        user = session.query(db.models.User).where(db.models.User.id == user_id).first()
-        user.tokens = tokens
         session.commit()
 
 

@@ -23,8 +23,8 @@ AVATAR_IMAGE_FORMAT = 'jpeg'
 
 @dataclasses.dataclass
 class QueueNames:
-    model_processing: str = 'process.models.normal'
-    generate_processing: str = 'process.generate.normal'
+    model_processing: str = 'q1'
+    generate_processing: str = 'q2'
 
 
 class CustomBaseSettings(BaseSettings):
@@ -84,6 +84,7 @@ class PostgresConfig(BaseModel):
 class RabbitMQ(CustomBaseSettings):
     """RabbitMQ configuration"""
     host: str = pydantic.Field(alias='RABBITMQ_HOST', default='localhost')
+    port: str = pydantic.Field(alias='RABBITMQ_PORT', default='5673')
     username: str = pydantic.Field(alias='RABBITMQ_DEFAULT_USER')
     password: str = pydantic.Field(alias='RABBITMQ_DEFAULT_PASS')
     queue_names: QueueNames = pydantic.Field(default_factory=QueueNames)
@@ -125,14 +126,13 @@ class DefaultUser(CustomBaseSettings):
     first_name: str
     last_name: str
     email: str
-    phone_number: int
+    phone_number: str
     password: str
 
 
 class JWT(CustomBaseSettings):
     key: str = pydantic.Field(alias='JWT_KEY')
     algorithm: str = pydantic.Field(alias='JWT_ALGORITHM')
-    # pixity_api_key: str = pydantic.Field(alias='PIXITY_API_KEY')
 
 
 # class CeleryTasksConfig(CustomBaseSettings):

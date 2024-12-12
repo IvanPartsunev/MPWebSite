@@ -10,7 +10,7 @@ rabbitmq_config = configuration.Config().rabbitmq
 
 def get_connection() -> BlockingConnection:
     credentials = pika.PlainCredentials(username=rabbitmq_config.username, password=rabbitmq_config.password)
-    return pika.BlockingConnection(pika.ConnectionParameters(rabbitmq_config.host, credentials=credentials))
+    return pika.BlockingConnection(pika.ConnectionParameters(rabbitmq_config.host, rabbitmq_config.port, credentials=credentials))
 
 
 def get_message_from_queue(channel: BlockingChannel, queue: str) -> Optional[str]:

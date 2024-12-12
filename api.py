@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import configuration
 import operations.seeders
+import operations.messages
+import routers.users
 
 rabbitmq_config = configuration.Config().rabbitmq
 
@@ -59,7 +61,7 @@ app = fastapi.FastAPI(docs_url='/api/docs', redoc_url='/api/redoc', lifespan=sta
 app.add_middleware(CORSMiddleware, allow_origins=cors_config.origins, allow_headers=cors_config.headers, allow_methods=cors_config.methods)
 
 # app.include_router(routers.roles.roles_router, prefix='/api/roles')
-# app.include_router(routers.users.users_router, prefix='/api/users')
+app.include_router(routers.users.users_router, prefix='/api/users')
 
 app.mount('/api/media', fastapi.staticfiles.StaticFiles(directory=configuration.MEDIA_PATH))
 
