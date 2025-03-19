@@ -21,11 +21,9 @@ def get_engine() -> sqlalchemy.Engine:
     """
 
     echo = config.log_queries
-    if config.database == 'sqlite' and config.sqlite.is_in_memory:
+    if config.database == configuration.DbTypeOptions.SQLITE and config.sqlite.is_in_memory:
         return _get_test_engine()
-    return sqlalchemy.create_engine(CONNECTION_STRING, echo=echo, pool_size=3, max_overflow=5, pool_pre_ping=True,
-                                    pool_timeout=30,
-                                    pool_recycle=1800)
+    return sqlalchemy.create_engine(CONNECTION_STRING, echo=echo)
 
 
 def get_connection(engine: sqlalchemy.Engine = None) -> sqlalchemy.Connection:

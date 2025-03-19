@@ -1,69 +1,89 @@
+"""Kitchen Helper API"""
 from contextlib import asynccontextmanager
 
-import fastapi
 import fastapi.staticfiles
+
+import multiprocessing
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-
 import configuration
-import operations.seeders
-import operations.messages
-import routers.users
+import appLogging
+import threading
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-rabbitmq_config = configuration.Config().rabbitmq
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-logging_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "default": {
-            "()": "uvicorn.logging.DefaultFormatter",
-            "fmt": "%(levelprefix)s %(asctime)s - %(message)s",
-        },
-        "access": {
-            "()": "uvicorn.logging.AccessFormatter",
-            "fmt": '%(levelprefix)s %(asctime)s - %(client_addr)s - "%(request_line)s" %(status_code)s',
-        },
-    },
-    "handlers": {
-        "default": {
-            "formatter": "default",
-            "class": "logging.FileHandler",
-            "filename": "logs/error.log",
-        },
-        "access": {
-            "formatter": "access",
-            "class": "logging.FileHandler",
-            "filename": "logs/access.log",
-        },
-    },
-    "loggers": {
-        "uvicorn": {"handlers": ["default"], "level": "INFO"},
-        "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
-        "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
-    },
-}
+
+resource = Resource(attributes={SERVICE_NAME: "MPwebApi"})
+trace_provider = TracerProvider(resource=resource)
+processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://jaeger:4318/v1/traces"))
+trace_provider.add_span_processor(processor)
+trace.set_tracer_provider(trace_provider)
+
+CPUS = multiprocessing.cpu_count()
+config = configuration.Config()
+
+logging = appLogging.Logger('api')
 
 
 @asynccontextmanager
 async def startup_shutdown_lifespan(app: fastapi.FastAPI):
-    operations.seeders.seed_default_user()
-    connection = operations.messages.get_connection()
-    channel = connection.channel()
-    channel.queue_declare(queue=rabbitmq_config.queue_names.generate_processing, durable=True)
-    channel.queue_declare(queue=rabbitmq_config.queue_names.model_processing, durable=True)
+    """
+    Startup and shutdown lifespan for the app
+    :param app:
+    :return:
+    """
+    try:
+        print("Start")
+        # app_seeder.apply_async(link=seed_recipe_categories.si())
+        # users_grpc_thread = threading.Thread(target=users_grpc)
+        # users_grpc_thread.daemon = True
+        # users_grpc_thread.start()
+        # images_grpc_thread = threading.Thread(target=images_grpc)
+        # images_grpc_thread.daemon = True
+        # images_grpc_thread.start()
+    except Exception:
+        error_message = "Seed task is not able to run!"
+        if config.running_on_dev:
+            logging.warning(error_message)
+        else:
+            logging.exception(error_message)
     yield
-    channel.close()
-    connection.close()
 
+
+app = fastapi.FastAPI(
+    docs_url='/api/docs', redoc_url='/api/redoc', openapi_url='/api/openai.json', lifespan=startup_shutdown_lifespan
+)
 cors_config = configuration.CorsSettings()
-app = fastapi.FastAPI(docs_url='/api/docs', redoc_url='/api/redoc', lifespan=startup_shutdown_lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=cors_config.origins, allow_headers=cors_config.headers, allow_methods=cors_config.methods)
 
-# app.include_router(routers.roles.roles_router, prefix='/api/roles')
-app.include_router(routers.users.users_router, prefix='/api/users')
+app.add_middleware(
+    CORSMiddleware,
+    **cors_config.__dict__,
+)
 
-app.mount('/api/media', fastapi.staticfiles.StaticFiles(directory=configuration.MEDIA_PATH))
+
+# app.include_router(features.health.router, prefix='/api/health')
+# app.include_router(features.users.user_router, prefix='/api/users')
+# app.include_router(features.users.role_router, prefix='/api/roles')
+# app.include_router(features.recipes.category_router, prefix='/api/categories')
+# app.include_router(features.recipes.recipes_router, prefix='/api/recipes')
+# app.include_router(features.recipes.ingredient_router, prefix='/api/ingredients')
+# app.include_router(features.images.router, prefix='/api/images')
+# app.mount('/api/media', fastapi.staticfiles.StaticFiles(directory=configuration.MEDIA_PATH))
+
+if config.context != configuration.ContextOptions.TEST:
+    FastAPIInstrumentor.instrument_app(app)
 
 if __name__ == '__main__':
-    uvicorn.run("api:app", workers=1, port=8001, host='0.0.0.0', log_config=logging_config)
+    uvicorn.run(
+        "api:app",
+        reload=config.running_on_dev,
+        workers=CPUS,
+        log_config=appLogging.UVICORN_LOG_CONFIG,
+        port=8000,
+        host='0.0.0.0',
+    )
