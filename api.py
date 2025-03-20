@@ -17,6 +17,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from routers import users
 
 resource = Resource(attributes={SERVICE_NAME: "MPwebApi"})
 trace_provider = TracerProvider(resource=resource)
@@ -66,7 +67,7 @@ app.add_middleware(
 )
 
 
-# app.include_router(features.health.router, prefix='/api/health')
+app.include_router(users.users_router, prefix='/api/users')
 # app.include_router(features.users.user_router, prefix='/api/users')
 # app.include_router(features.users.role_router, prefix='/api/roles')
 # app.include_router(features.recipes.category_router, prefix='/api/categories')
